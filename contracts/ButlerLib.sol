@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.0;
+pragma solidity ^0.8.0;
 
-import "v3-periphery/interfaces/IQuoterV2.sol";
-import "v3-core/libraries/TickMath.sol";
-import "v3-core/libraries/FullMath.sol";
-import "v3-core/interfaces/IUniswapV3Pool.sol";
+import "./interfaces/IQuoterV2.sol";
+import "./libraries/TickMath.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
+import "./interfaces/pool/IRamsesV2Pool.sol";
 
 library Univ3ButlerLib {
-    uint256 constant PRECISION = 2**96;
+    uint256 constant PRECISION = 2 ** 96;
 
     /// @notice Validates ticks to be multiples of tickSpacing
     function validateTicks(
@@ -27,7 +27,7 @@ library Univ3ButlerLib {
     /// @notice Converts sqrtPriceX96/sqrtRatioX96 of a given pool to spot price (assuming `amount` is 1 baseToken)
     function decodePriceSqrt(
         uint256 amount,
-        IUniswapV3Pool pool,
+        IRamsesV2Pool pool,
         address baseToken,
         address quoteToken
     ) public view returns (uint256 quoteAmount) {
@@ -36,38 +36,36 @@ library Univ3ButlerLib {
         if (sqrtRatioX96 <= type(uint128).max) {
             uint256 ratioX192 = uint256(sqrtRatioX96) * sqrtRatioX96;
             quoteAmount = baseToken < quoteToken
-                ? FullMath.mulDiv(ratioX192, amount, 1 << 192)
-                : FullMath.mulDiv(1 << 192, amount, ratioX192);
+                ? Math.mulDiv(ratioX192, amount, 1 << 192)
+                : Math.mulDiv(1 << 192, amount, ratioX192);
         } else {
-            uint256 ratioX128 = FullMath.mulDiv(
+            uint256 ratioX128 = Math.mulDiv(
                 sqrtRatioX96,
                 sqrtRatioX96,
                 1 << 64
             );
             quoteAmount = baseToken < quoteToken
-                ? FullMath.mulDiv(ratioX128, amount, 1 << 128)
-                : FullMath.mulDiv(1 << 128, amount, ratioX128);
+                ? Math.mulDiv(ratioX128, amount, 1 << 128)
+                : Math.mulDiv(1 << 128, amount, ratioX128);
         }
     }
 
     /// @notice Converts sqrtPrice into (amount * token0) = X token1
     ///         Enter amount as 10**token0.decimals() to get spot price
     ///         of X token0 = 1 token1
-    function decodePriceSqrt(uint256 amount, uint160 sqrtPriceX96)
-        public
-        pure
-        returns (uint256)
-    {
+    function decodePriceSqrt(
+        uint256 amount,
+        uint160 sqrtPriceX96
+    ) public pure returns (uint256) {
         uint256 priceX192 = uint256(sqrtPriceX96) * sqrtPriceX96;
-        return FullMath.mulDiv(priceX192, amount, 1 << 128);
+        return Math.mulDiv(priceX192, amount, 1 << 128);
     }
 
     /// @notice Encodes 1 token0 = X token1
-    function encodePriceSqrt(uint256 reserve1, uint256 reserve0)
-        public
-        pure
-        returns (uint160)
-    {
+    function encodePriceSqrt(
+        uint256 reserve1,
+        uint256 reserve0
+    ) public pure returns (uint160) {
         return uint160(sqrt((reserve1 * PRECISION * PRECISION) / reserve0));
     }
 

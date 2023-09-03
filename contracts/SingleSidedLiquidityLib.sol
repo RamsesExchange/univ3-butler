@@ -1,16 +1,14 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.7.0;
-pragma abicoder v2;
+pragma solidity ^0.8.0;
 
-import "@uniswap/v3-periphery/contracts/interfaces/IQuoterV2.sol";
-import "@uniswap/v3-periphery/contracts/libraries/LiquidityAmounts.sol";
+import "./interfaces/IQuoterV2.sol";
+import "./libraries/LiquidityAmounts.sol";
 
-import "@uniswap/v3-core/contracts/libraries/TickMath.sol";
-import "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
+import "./libraries/TickMath.sol";
 
-import "@openzeppelin/contracts/token/ERC20/SafeERC20.sol";
+import "./interfaces/pool/IRamsesV2Pool.sol";
+
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/math/SafeMath.sol";
 
 /// @title Univ3SingleSidedLiquidity
 /// @author libevm.eth
@@ -18,16 +16,14 @@ import "@openzeppelin/contracts/math/SafeMath.sol";
 ///         that consists of tokenA/tokenB, where the range we want to add is within range of
 ///         the current sqrtRatioX96
 /// @dev Should be called off-chain, very gas intensive
-library SingleSidedLiquidityLib {
-    using SafeERC20 for IERC20;
-    using SafeMath for uint256;
+contract SingleSidedLiquidityLib {
     using TickMath for int24;
 
     // Uniswap QuoterV2
     // We need the v2 quoter as it provides us with more information post swap
     // e.g. post-swap sqrtRatioX96
     IQuoterV2 internal constant quoter =
-        IQuoterV2(0x61fFE014bA17989E743c5F6cB21bF9697530B21e);
+        IQuoterV2(0xAA20EFF7ad2F523590dE6c04918DaAE0904E3b20);
 
     // Min / Max Sqrt ratios
     uint160 internal constant MIN_SQRT_RATIO = 4295128740;
@@ -73,8 +69,8 @@ library SingleSidedLiquidityLib {
         Cache memory cache;
 
         // Getting pool info
-        cache.fee = IUniswapV3Pool(pool).fee();
-        cache.tickSpacing = IUniswapV3Pool(pool).tickSpacing();
+        cache.fee = IRamsesV2Pool(pool).fee();
+        cache.tickSpacing = IRamsesV2Pool(pool).tickSpacing();
 
         // Make sure valid ticks
         lowerTick = lowerTick - (lowerTick % cache.tickSpacing);
@@ -87,11 +83,11 @@ library SingleSidedLiquidityLib {
 
         // Convinience
         if (isAmountInToken0) {
-            cache.tokenIn = IUniswapV3Pool(pool).token0();
-            cache.tokenOut = IUniswapV3Pool(pool).token1();
+            cache.tokenIn = IRamsesV2Pool(pool).token0();
+            cache.tokenOut = IRamsesV2Pool(pool).token1();
         } else {
-            cache.tokenIn = IUniswapV3Pool(pool).token1();
-            cache.tokenOut = IUniswapV3Pool(pool).token0();
+            cache.tokenIn = IRamsesV2Pool(pool).token1();
+            cache.tokenOut = IRamsesV2Pool(pool).token0();
         }
 
         // Sqrt price limit
@@ -101,7 +97,7 @@ library SingleSidedLiquidityLib {
 
         // Binary search params
         // Start with swapping half - very naive but binary search lets go
-        amountToSwap = amountIn.div(2);
+        amountToSwap = amountIn / 2;
         uint256 i; // Cur binary search iteration
         (uint256 low, uint256 high) = (0, amountIn);
 
@@ -124,7 +120,7 @@ library SingleSidedLiquidityLib {
             // Stack too deep reee
             {
                 // How many tokens will we have post swap?
-                uint256 amountInPostSwap = amountIn.sub(amountToSwap);
+                uint256 amountInPostSwap = amountIn - amountToSwap;
 
                 // Calculate liquidity received
                 // with: backingTokens we will have post swap
@@ -148,16 +144,16 @@ library SingleSidedLiquidityLib {
 
                 // Calculate leftover amounts
                 if (isAmountInToken0) {
-                    cache.leftoverAmount0 = amountInPostSwap.sub(lpAmount0);
-                    cache.leftoverAmount1 = cache.amountOutRecv.sub(lpAmount1);
+                    cache.leftoverAmount0 = amountInPostSwap - lpAmount0;
+                    cache.leftoverAmount1 = cache.amountOutRecv - lpAmount1;
                 } else {
-                    cache.leftoverAmount0 = cache.amountOutRecv.sub(lpAmount0);
-                    cache.leftoverAmount1 = amountInPostSwap.sub(lpAmount1);
+                    cache.leftoverAmount0 = cache.amountOutRecv - lpAmount0;
+                    cache.leftoverAmount1 = amountInPostSwap - lpAmount1;
                 }
 
                 // Trim some dust
-                cache.leftoverAmount0 = cache.leftoverAmount0.div(100).mul(100);
-                cache.leftoverAmount1 = cache.leftoverAmount1.div(100).mul(100);
+                cache.leftoverAmount0 = (cache.leftoverAmount0 / 100) * 100;
+                cache.leftoverAmount1 = (cache.leftoverAmount1 / 100) * 100;
             }
 
             // Termination condition, we approximated enough
@@ -174,7 +170,7 @@ library SingleSidedLiquidityLib {
                 if (cache.leftoverAmount0 > 0) {
                     (low, amountToSwap, high) = (
                         amountToSwap,
-                        high.add(amountToSwap).div(2),
+                        (high + amountToSwap) / 2,
                         high
                     );
                 }
@@ -183,7 +179,7 @@ library SingleSidedLiquidityLib {
                 else if (cache.leftoverAmount1 > 0) {
                     (low, amountToSwap, high) = (
                         low,
-                        low.add(amountToSwap).div(2),
+                        (low + amountToSwap) / 2,
                         amountToSwap
                     );
                 }
@@ -197,7 +193,7 @@ library SingleSidedLiquidityLib {
                 if (cache.leftoverAmount1 > 0) {
                     (low, amountToSwap, high) = (
                         amountToSwap,
-                        high.add(amountToSwap).div(2),
+                        (high + amountToSwap) / 2,
                         high
                     );
                 }
@@ -206,7 +202,7 @@ library SingleSidedLiquidityLib {
                 else if (cache.leftoverAmount0 > 0) {
                     (low, amountToSwap, high) = (
                         low,
-                        low.add(amountToSwap).div(2),
+                        (low + amountToSwap) / 2,
                         amountToSwap
                     );
                 }
@@ -218,7 +214,6 @@ library SingleSidedLiquidityLib {
 
             ++i; // gas optimizoooor
         }
-
         return (cache.liquidity, amountToSwap);
     }
 }

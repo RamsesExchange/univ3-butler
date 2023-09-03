@@ -1,8 +1,0 @@
-ds-test/=lib/ds-test/src/
-v3-core/=lib/v3-core/contracts/
-v3-periphery/=lib/v3-periphery/contracts/
-@uniswap-v3-core/=lib/v3-core/
-@uniswap/v3-core/=lib/v3-core/
-@uniswap-v3-periphery/=lib/v3-periphery/
-@uniswap/v3-periphery/=lib/v3-periphery/
-@openzeppelin/=lib/openzeppelin-contracts/
