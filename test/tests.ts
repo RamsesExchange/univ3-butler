@@ -1,8 +1,6 @@
 import { ethers } from "hardhat";
 import { SingleSidedLiquidityLib, SwapCalculator } from "../typechain-types";
 import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
-import { expect } from "chai";
-import { SingleSidedV2 } from "../typechain-types";
 
 describe("zapCalcs", function () {
   async function deploy() {
